@@ -369,6 +369,34 @@
             color: var(--accent);
             text-decoration: none;
         }
+
+        .mode-toggle {
+            display: flex;
+            justify-content: center;
+            gap: 0;
+            margin: 30px auto;
+            background: var(--bg-secondary);
+            padding: 5px;
+            border-radius: 12px;
+            max-width: 400px;
+        }
+        
+        .mode-btn {
+            flex: 1;
+            padding: 12px 20px;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        
+        .mode-btn.active {
+            background: var(--accent);
+            color: white;
+        }
     </style>
 </head>
 <body>
@@ -381,7 +409,13 @@
             <p class="theory">На основе теории Роберта Плутчика (1980)</p>
         </header>
 
-        <div class="calculator-section">
+
+        <div class="mode-toggle">
+            <button class="mode-btn active" onclick="switchMode('direct')">→ Синтез (базовые → сложные)</button>
+            <button class="mode-btn" onclick="switchMode('reverse')">← Разложение (сложные → базовые)</button>
+        </div>
+
+        <div class="calculator-section" id="directMode">
             <div class="emotion-grid">
                 <div class="emotion-select-box">
                     <h3>Первая эмоция</h3>
@@ -403,6 +437,22 @@
             <div class="button-group">
                 <button class="btn btn-secondary" onclick="randomPair()">🎲 Случайная пара</button>
                 <button class="btn btn-primary" onclick="calculate()">✨ Рассчитать синтез</button>
+            </div>
+        </div>
+
+
+        <div class="calculator-section" id="reverseMode" style="display:none">
+            <div class="emotion-grid" style="grid-template-columns: 1fr">
+                <div class="emotion-select-box">
+                    <h3>Сложная эмоция для разложения</h3>
+                    <select id="complexEmotion">
+                        <option value="">Выберите сложную эмоцию...</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button class="btn btn-primary" onclick="decompose()">🔍 Разложить на базовые</button>
             </div>
         </div>
 
@@ -727,6 +777,71 @@
             }
         };
 
+        // Генерация недостающих комбинаций на лету
+        function generateMissing(name1, name2) {
+            // Одинаковые эмоции - усиление
+            if (name1 === name2) {
+                const intensityMap = {
+                    "Радость": {name: "Эйфория", emoji: "🤩", def: "Крайняя степень радости"},
+                    "Доверие": {name: "Преданность", emoji: "🤝", def: "Глубокое доверие"},
+                    "Страх": {name: "Ужас", emoji: "😱", def: "Крайний страх"},
+                    "Удивление": {name: "Шок", emoji: "😲", def: "Крайнее удивление"},
+                    "Грусть": {name: "Депрессия", emoji: "😭", def: "Глубокая грусть"},
+                    "Отвращение": {name: "Омерзение", emoji: "🤮", def: "Крайнее отвращение"},
+                    "Гнев": {name: "Ярость", emoji: "😡", def: "Крайний гнев"},
+                    "Предвкушение": {name: "Нетерпение", emoji: "😣", def: "Крайнее предвкушение"}
+                };
+                const intense = intensityMap[name1];
+                return {
+                    name: intense.name,
+                    emoji: intense.emoji,
+                    definition: intense.def,
+                    type: "Усиленная базовая эмоция",
+                    explanation: `${name1}, усиливаясь сама собой, переходит в ${intense.name.toLowerCase()}`,
+                    symptoms: [`Крайняя степень проявления ${name1.toLowerCase()}`, "Очень высокая интенсивность", "Сложность контроля"],
+                    examples: [`Длительное переживание ${name1.toLowerCase()}`, "Накопление эмоции"],
+                    tips: ["Дайте эмоции выход", "Обратитесь за поддержкой", "Найдите способы регуляции"]
+                };
+            }
+            
+            // Для остальных комбинаций - универсальный ответ
+            return {
+                name: "Смешанная эмоция",
+                emoji: "❓",
+                definition: "Комбинация не имеет устоявшегося названия",
+                type: "Неопределенная комбинация",
+                explanation: `${name1} и ${name2} могут сосуществовать одновременно, создавая сложное амбивалентное состояние`,
+                symptoms: ["Противоречивые чувства", "Внутренний конфликт", "Сложность понимания своего состояния"],
+                examples: ["Ситуации с противоречивыми стимулами", "Сложные жизненные обстоятельства"],
+                tips: ["Примите сложность чувств", "Дайте место обеим эмоциям", "Исследуйте каждую отдельно"]
+            };
+        }
+
+        // Создаем обратный индекс для разложения
+        const reverseIndex = {};
+        Object.keys(emotionSynthesis).forEach(key => {
+            const [base1, base2] = key.split('+');
+            const emotion = emotionSynthesis[key];
+            
+            if (!reverseIndex[emotion.name]) {
+                reverseIndex[emotion.name] = {
+                    emoji: emotion.emoji,
+                    definition: emotion.definition,
+                    explanation: emotion.explanation,
+                    components: [[base1, base2]]
+                };
+            } else {
+                // Проверяем, не добавлена ли уже такая комбинация
+                const exists = reverseIndex[emotion.name].components.some(
+                    c => (c[0] === base1 && c[1] === base2) || (c[0] === base2 && c[1] === base1)
+                );
+                if (!exists) {
+                    reverseIndex[emotion.name].components.push([base1, base2]);
+                }
+            }
+        });
+
+
         // Инициализация
         let currentTheme = 'dark';
 
@@ -735,15 +850,25 @@
             loadTheme();
         }
 
+
         function populateSelects() {
             const select1 = document.getElementById('emotion1');
             const select2 = document.getElementById('emotion2');
+            const complexSelect = document.getElementById('complexEmotion');
 
             primaryEmotions.forEach(emotion => {
                 const option1 = new Option(`${emotion.emoji} ${emotion.name}`, emotion.name);
                 const option2 = new Option(`${emotion.emoji} ${emotion.name}`, emotion.name);
                 select1.add(option1);
                 select2.add(option2);
+            });
+
+            // Заполняем список сложных эмоций для обратного калькулятора
+            const complexEmotions = Object.keys(reverseIndex).sort();
+            complexEmotions.forEach(emotionName => {
+                const emotion = reverseIndex[emotionName];
+                const option = new Option(`${emotion.emoji} ${emotionName}`, emotionName);
+                complexSelect.add(option);
             });
         }
 
@@ -766,22 +891,20 @@
                 return;
             }
 
-            if (name1 === name2) {
-                alert('Выберите разные эмоции для синтеза');
-                return;
-            }
-
             const emotion1 = primaryEmotions.find(e => e.name === name1);
             const emotion2 = primaryEmotions.find(e => e.name === name2);
 
             const synthesisKey = getSynthesisKey(name1, name2);
+            let result;
 
             if (synthesisKey) {
-                const result = emotionSynthesis[synthesisKey];
-                displayResult(emotion1, emotion2, result, true);
+                result = emotionSynthesis[synthesisKey];
             } else {
-                displayNoSynthesis(emotion1, emotion2);
+                // Генерируем отсутствующую комбинацию
+                result = generateMissing(name1, name2);
             }
+
+            displayResult(emotion1, emotion2, result, !!synthesisKey);
         }
 
         function displayResult(emotion1, emotion2, result, found) {
@@ -923,6 +1046,125 @@
             const savedTheme = localStorage.getItem('theme') || 'dark';
             currentTheme = savedTheme;
             document.body.setAttribute('data-theme', currentTheme);
+        }
+
+        function switchMode(mode) {
+            const directMode = document.getElementById('directMode');
+            const reverseMode = document.getElementById('reverseMode');
+            const directBtn = document.querySelector('.mode-btn:first-child');
+            const reverseBtn = document.querySelector('.mode-btn:last-child');
+            const results = document.getElementById('results');
+            
+            if (mode === 'direct') {
+                directMode.style.display = 'block';
+                reverseMode.style.display = 'none';
+                directBtn.classList.add('active');
+                reverseBtn.classList.remove('active');
+            } else {
+                directMode.style.display = 'none';
+                reverseMode.style.display = 'block';
+                directBtn.classList.remove('active');
+                reverseBtn.classList.add('active');
+            }
+            
+            // Скрываем результаты при переключении
+            results.classList.remove('show');
+        }
+
+        function decompose() {
+            const emotionName = document.getElementById('complexEmotion').value;
+            
+            if (!emotionName) {
+                alert('Пожалуйста, выберите сложную эмоцию');
+                return;
+            }
+            
+            const emotion = reverseIndex[emotionName];
+            const resultsSection = document.getElementById('results');
+            const formula = document.getElementById('formula');
+            const emoji = document.getElementById('resultEmoji');
+            const name = document.getElementById('resultName');
+            const definition = document.getElementById('resultDefinition');
+            const details = document.getElementById('resultDetails');
+            
+            // Формула разложения
+            formula.innerHTML = `
+                <span class="emotion-tag" style="background: var(--accent); color: white;">
+                    ${emotion.emoji} ${emotionName}
+                </span>
+                <span style="font-size: 2rem; margin: 0 15px;">=</span>
+            `;
+            
+            // Показываем все возможные варианты разложения
+            let componentsHTML = '';
+            emotion.components.forEach((comp, index) => {
+                const [name1, name2] = comp;
+                const em1 = primaryEmotions.find(e => e.name === name1);
+                const em2 = primaryEmotions.find(e => e.name === name2);
+                
+                if (index > 0) {
+                    componentsHTML += '<div style="text-align: center; margin: 15px 0; font-size: 1.2rem; color: var(--text-secondary);">или</div>';
+                }
+                
+                componentsHTML += `
+                    <div style="display: flex; justify-content: center; align-items: center; gap: 15px; margin: 10px 0;">
+                        <span class="emotion-tag" style="background: ${em1.color}; color: white;">
+                            ${em1.emoji} ${em1.name}
+                        </span>
+                        <span style="font-size: 2rem;">+</span>
+                        <span class="emotion-tag" style="background: ${em2.color}; color: white;">
+                            ${em2.emoji} ${em2.name}
+                        </span>
+                    </div>
+                `;
+            });
+            
+            formula.innerHTML += componentsHTML;
+            
+            // Результат
+            emoji.textContent = emotion.emoji;
+            name.textContent = emotionName;
+            definition.textContent = `"${emotion.definition}"`;
+            
+            // Детали
+            let detailsHTML = `
+                <div class="detail-section">
+                    <h4>💡 Объяснение</h4>
+                    <p>${emotion.explanation}</p>
+                </div>
+                
+                <div class="detail-section">
+                    <h4>🧩 Базовые компоненты</h4>
+            `;
+            
+            emotion.components.forEach(comp => {
+                const [name1, name2] = comp;
+                const em1 = primaryEmotions.find(e => e.name === name1);
+                const em2 = primaryEmotions.find(e => e.name === name2);
+                
+                detailsHTML += `
+                    <div style="background: var(--bg-primary); padding: 20px; border-radius: 12px; margin: 15px 0;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                            <div>
+                                <h4 style="color: ${em1.color};">${em1.emoji} ${em1.name}</h4>
+                                <p style="margin: 10px 0; font-style: italic;">${em1.definition}</p>
+                                <p><strong>Функция:</strong> ${em1.function}</p>
+                            </div>
+                            <div>
+                                <h4 style="color: ${em2.color};">${em2.emoji} ${em2.name}</h4>
+                                <p style="margin: 10px 0; font-style: italic;">${em2.definition}</p>
+                                <p><strong>Функция:</strong> ${em2.function}</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            detailsHTML += '</div>';
+            details.innerHTML = detailsHTML;
+            
+            resultsSection.classList.add('show');
+            resultsSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
 
         window.addEventListener('DOMContentLoaded', init);
